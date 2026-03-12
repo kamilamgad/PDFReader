@@ -15,19 +15,40 @@ from pathlib import Path
 
 
 DOWNLOADS = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"
-SUFFIXES = ("Auto", "Home")
+SUFFIXES = ("auto", "home", "condo")
 
 
 def normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
-def score_candidate(stem: str, target: str) -> int:
+def split_candidate(stem: str) -> tuple[str, str, str] | None:
     normalized = normalize(stem)
-    if normalized == target + "auto" or normalized == target + "home":
+    match = re.fullmatch(r"(.+?)(auto|home|condo)(\d*)", normalized)
+    if not match:
+        return None
+    return match.group(1), match.group(2), match.group(3)
+
+
+def policy_type_for_path(path: Path) -> str | None:
+    parts = split_candidate(path.stem)
+    if not parts:
+        return None
+    return parts[1]
+
+
+def score_candidate(stem: str, target: str) -> int:
+    parts = split_candidate(stem)
+    if not parts:
+        return 99
+
+    name_part, _, ordinal = parts
+    if name_part == target and not ordinal:
         return 0
-    if normalized.startswith(target) and any(normalized.endswith(s.lower()) for s in SUFFIXES):
+    if name_part == target:
         return 1
+    if name_part.startswith(target):
+        return 2
     return 99
 
 
