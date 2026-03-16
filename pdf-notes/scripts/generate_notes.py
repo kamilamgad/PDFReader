@@ -23,7 +23,7 @@ from find_matching_pdfs import find_candidates, normalize, policy_type_for_path
 
 DOWNLOADS = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"
 DEFAULT_TEMPLATE = DOWNLOADS / "NotesTemplate.txt"
-DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "generated"
+DEFAULT_OUTPUT_DIR = DOWNLOADS
 DEFAULT_OUTPUT_SUFFIX = "Notes.txt"
 OMIT_LINE = "__OMIT_LINE__"
 PLAIN_LABELS = (
@@ -33,6 +33,27 @@ PLAIN_LABELS = (
     "Phone number",
     "Discounts",
 )
+SECTION_MARKERS = {
+    "///////////Home/////////": "home",
+    "///////////Auto/////////": "auto",
+}
+SECTION_FIELD_ALIASES = {
+    "home": {
+        "Policy Number:": ("Policy Number:", "Home Policy Number:"),
+        "Effective:": ("Effective:",),
+        "Policy Premium": ("Policy Premium",),
+        "Discounts": ("Discounts",),
+    },
+    "auto": {
+        "Policy Number:": ("Auto Policy Number", "Policy Number:"),
+        "Effective:": ("Auto Effective", "Effective:"),
+        "Policy Premium": ("Auto policy premium", "Policy Premium"),
+        "Discounts": ("Auto Discounts", "Discounts"),
+    },
+}
+SHARED_SINGLETON_LABELS = {
+    "e-mail Address(es):",
+}
 
 
 def read_pdf_text(path: Path) -> str:
@@ -85,7 +106,10 @@ def split_name(full_name: str) -> tuple[str, str]:
 
 
 def extract_person_names(raw: str) -> list[str]:
-    names = re.findall(r"[A-Z][a-z]+(?: [A-Z])? [A-Z][a-z]+", clean_value(raw))
+    names = re.findall(
+        r"[A-Z][a-z]+(?: [A-Z])?(?: [A-Z][a-z]+){1,3}",
+        clean_value(raw),
+    )
     return unique_preserve(names)
 
 
@@ -105,6 +129,40 @@ def split_shared_last_name_names(raw: str) -> list[str]:
     first_one = format_name(f"{match.group(1)} {match.group(3)}")
     first_two = format_name(f"{match.group(2)} {match.group(3)}")
     return unique_preserve([first_one, first_two])
+
+
+def split_two_full_names(raw: str) -> list[str]:
+    cleaned = clean_value(raw)
+    parts = [part for part in cleaned.split() if part]
+    if len(parts) != 4:
+        return []
+    if not all(re.fullmatch(r"[A-Z][a-z]+(?:-[A-Z][a-z]+)?", part) for part in parts):
+        return []
+    return unique_preserve(
+        [
+            format_name(f"{parts[0]} {parts[1]}"),
+            format_name(f"{parts[2]} {parts[3]}"),
+        ]
+    )
+
+
+def split_dear_names(text: str) -> list[str]:
+    raw = search(
+        text,
+        r"Dear\s+(.*?),",
+    )
+    if not raw:
+        return []
+    names = split_shared_last_name_names(raw)
+    if not names:
+        names = [
+            format_name(part)
+            for part in re.split(r"\band\b", raw, flags=re.IGNORECASE)
+            if clean_value(part)
+        ]
+    if not names:
+        names = split_two_full_names(raw)
+    return unique_preserve(names)
 
 
 def format_policy_number(value: str) -> str:
@@ -150,6 +208,8 @@ def extract_home_names(text: str, customer: str) -> list[str]:
     raw = re.sub(r"\s+[0-9]{1,5}\s+.*$", "", raw).strip()
     names = split_shared_last_name_names(raw)
     if not names:
+        names = split_two_full_names(raw)
+    if not names:
         names = [format_name(part) for part in extract_person_names(raw)]
     if not names:
         names = [
@@ -157,6 +217,8 @@ def extract_home_names(text: str, customer: str) -> list[str]:
             for part in re.split(r"\band\b", raw, flags=re.IGNORECASE)
             if clean_value(part)
         ]
+    if not names:
+        names = split_dear_names(text)
     if not names:
         return []
     primary, secondary = choose_primary_names(names, customer)
@@ -180,7 +242,11 @@ def extract_auto_names(text: str, customer: str) -> list[str]:
         )
     names = split_shared_last_name_names(raw)
     if not names:
+        names = split_two_full_names(raw)
+    if not names:
         names = extract_person_names(raw)
+    if not names:
+        names = split_dear_names(text)
     if not names:
         return []
     primary, secondary = choose_primary_names(names, customer)
@@ -250,6 +316,22 @@ def extract_loss_settlement_values(text: str) -> dict[str, str]:
 
 def extract_home_deductible(text: str) -> str:
     value_pattern = r"(\$[0-9,]+(?:\.\d{2})?|[0-9]+(?:\.[0-9]+)?%)"
+    hurricane_combo = re.search(
+        r"Deductible\s*Type of Loss Deductible\s*Applicable to each covered loss except Hurricane loss\s*"
+        r"(\$[0-9,]+(?:\.\d{2})?)\s*"
+        r"Hurricane Loss\s*\(([^)]+)\)\s*"
+        r"(\$[0-9,]+(?:\.\d{2})?)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if hurricane_combo:
+        all_perils = clean_value(hurricane_combo.group(1))
+        hurricane_basis = clean_value(hurricane_combo.group(2))
+        hurricane_amount = clean_value(hurricane_combo.group(3))
+        hurricane_percent = search(hurricane_basis, r"([0-9]+(?:\.[0-9]+)?%)")
+        if hurricane_percent:
+            return f"All Perils {all_perils}; Hurricane {hurricane_percent} ({hurricane_amount})"
+        return f"All Perils {all_perils}; Hurricane {hurricane_basis} {hurricane_amount}".strip()
 
     all_perils = search_first(
         text,
@@ -425,8 +507,12 @@ def extract_home_fields(text: str, customer: str) -> dict[str, str]:
         ),
         "Sewer & Drain Damage": search_first(
             text,
+            r"Sewer\s*&\s*Drain Damage\s*-\s*Higher Limits\s*(\$[0-9,]+)",
             r"Sewer\s*&\s*Drain Damage - Extended Contents\s*(\$[0-9,]+)",
             r"Sewer\s*&\s*Drain - Basic Contents\s*(\$[0-9,]+)",
+            r"Sewer\s*&\s*Drain Damage\s*(Full Limit)",
+            r"Sewer\s*&\s*Drain Damage\s*(Yes)",
+            r"Sewer\s*&\s*Drain Damage\s*(See endorsement\s*[A-Z0-9-]+)",
         ),
         "Limited Matching Coverage for Siding and Roof Materials": search(
             text,
@@ -504,7 +590,7 @@ def parse_auto_household_drivers(text: str) -> str:
 
 def parse_auto_vehicle_summary(text: str) -> dict[str, str]:
     match = re.search(
-        r"Vehicle Information.*?1\s+(.*?)\s+Other than Collision:\s*(Not Covered|\$[0-9,]+)\s+"
+        r"Vehicle Information.*?1\s+(.*?)\s+(?:Comprehensive|Other than Collision):\s*(Not Covered|\$[0-9,]+)\s+"
         r"([A-HJ-NPR-Z0-9]{17})\s+Collision:\s*(Not Covered|\$[0-9,]+)\s+Vehicle Level Coverage Items",
         text,
         re.IGNORECASE | re.DOTALL,
@@ -531,9 +617,11 @@ def parse_auto_vehicles(text: str) -> list[dict[str, str]]:
     pattern = re.compile(
         r"(\d+)\s+"
         r"(.*?)\s+"
-        r"Other than Collision:\s*(Not Covered|\$[0-9,]+)\s+"
+        r"(?:Comprehensive|Other than Collision):\s*(Not Covered|\$[0-9,]+)\s+"
         r"([A-HJ-NPR-Z0-9]{17})\s+"
         r"Collision:\s*(Not Covered|\$[0-9,]+)"
+        r"(?:\s+Uninsured Motorist Property Damage:\s*\$[0-9,]+(?:\s+\$[0-9,]+ each accident)?)?"
+        r"(?:\s+\$[0-9,]+ each accident)?"
         r"(?=\s*(?:\.\s*)?\d+\s+[0-9]{4}|\s*$)",
         re.IGNORECASE | re.DOTALL,
     )
@@ -632,6 +720,10 @@ def extract_auto_fields(text: str, customer: str) -> dict[str, str]:
     effective = search(text, r"Effective:\s*([0-9/]+)")
     expiration = search(text, r"Expiration:\s*([0-9/]+)")
     premium = search(text, r"Policy Premium\s*(\$[0-9,]+(?:\.\d{2})?)")
+    header_address = search(
+        text,
+        r"Auto Insurance\s+Renewal\s+farmers\.com\s+.*?[A-Z][A-Z0-9 .'-]+\s+([0-9]{1,5}\s+[A-Z0-9#.,' -]+?\s+[A-Z]{2}\s+[0-9]{5}(?:-[0-9]{4})?)\s+Your Farmers\s+Policy",
+    )
 
     towing_values = extract_vehicle_level_row_values(
         text,
@@ -663,7 +755,10 @@ def extract_auto_fields(text: str, customer: str) -> dict[str, str]:
         "Last Name": primary[1],
         "Second named insured First name": secondary[0],
         "Second named insured Last Name": secondary[1],
-        "Property Insured": search(text, r"Named Insured\(s\):.*?\s([0-9]{1,5} .*? [A-Z]{2} [0-9]{5}(?:-[0-9]{4})?)"),
+        "Property Insured": header_address or search(
+            text,
+            r"Named Insured\(s\):.*?\s([0-9]{1,5}\s+[A-Za-z0-9#.,' -]+?\s+[A-Z]{2}\s+[0-9]{5}(?:-[0-9]{4})?)\s+(?:e-mail Address\(es\):|Underwritten By:)",
+        ),
         "e-mail Address(es):": search(text, r"e-mail Address\(es\):\s*(.*?)Underwritten By:"),
         "Auto Policy Number": policy_number,
         "Auto Effective": effective,
@@ -893,7 +988,10 @@ def combine_home_fields(home_docs: list[dict[str, str]]) -> dict[str, str]:
     if not home_docs:
         return {}
     if len(home_docs) == 1:
-        return home_docs[0]
+        combined = home_docs[0].copy()
+        if combined.get("Home Policy Number:") and not combined.get("Policy Number:"):
+            combined["Policy Number:"] = combined["Home Policy Number:"]
+        return combined
 
     tuples = [(doc.get("Home Policy Number:", ""), doc) for doc in home_docs]
     combined = home_docs[0].copy()
@@ -902,6 +1000,7 @@ def combine_home_fields(home_docs: list[dict[str, str]]) -> dict[str, str]:
         "Effective:",
         "Policy Premium",
         "Year Built",
+        "Age of Roof",
         "Square Footage",
         "Deductible",
         "Coverage A - Dwelling",
@@ -912,6 +1011,8 @@ def combine_home_fields(home_docs: list[dict[str, str]]) -> dict[str, str]:
         "Coverage F - Medical Payments to Others",
     ):
         combined[key] = summarize_documents(tuples, key)
+    if combined.get("Home Policy Number:") and not combined.get("Policy Number:"):
+        combined["Policy Number:"] = combined["Home Policy Number:"]
     return combined
 
 
@@ -925,18 +1026,114 @@ def strip_template_guidance(template_text: str) -> str:
         flags=re.IGNORECASE,
     )
     template_text = template_text.replace("(if found)", "")
+    # Some template placeholders are wrapped across lines; normalize internal
+    # whitespace so token matching stays stable during line-by-line rendering.
+    template_text = re.sub(
+        r"\{([^{}]+)\}",
+        lambda match: "{" + clean_label(match.group(1)) + "}",
+        template_text,
+        flags=re.DOTALL,
+    )
     return template_text
 
 
+def render_auto_only_notes(fields: dict[str, str]) -> str:
+    lines = [
+        " ".join(part for part in (fields.get("First name", ""), fields.get("Last Name", "")) if part).strip(),
+        f"Date of birth: {fields.get('Date of birth', '')}".rstrip(),
+        f"Social security number: {fields.get('Social security number', '')}".rstrip(),
+        f"Drivers license #: {fields.get('Drivers license #', '')}".rstrip(),
+        "",
+    ]
+
+    if fields.get("__has_second_insured__"):
+        lines.extend(
+            [
+                " ".join(
+                    part
+                    for part in (
+                        fields.get("Second named insured First name", ""),
+                        fields.get("Second named insured Last Name", ""),
+                    )
+                    if part
+                ).strip(),
+                f"Date of birth: {fields.get('Date of birth__2', '')}".rstrip(),
+                f"Social security number: {fields.get('Social security number__2', '')}".rstrip(),
+                f"Drivers license #: {fields.get('Drivers license #__2', '')}".rstrip(),
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            f"Phone number: {fields.get('Phone number', '')}".rstrip(),
+            f"e-mail Address(es): {fields.get('e-mail Address(es):', '')}".rstrip(),
+        ]
+    )
+    lines.extend(render_auto_section_lines(fields, include_marker=True))
+    return "\n".join(collapse_blank_lines([line.rstrip() for line in lines])).rstrip() + "\n"
+
+
+def render_auto_section_lines(fields: dict[str, str], include_marker: bool) -> list[str]:
+    lines = [
+        "///////////Auto/////////" if include_marker else "",
+    ]
+
+    for label in (
+        "Auto Policy Number",
+        "Auto Effective",
+        "Auto Expiration",
+        "Vehicle Information",
+        "Household Drivers",
+        "Bodily Injury Liability",
+        "Property Damage Liability",
+        "Other than Collision",
+        "Towing and Labor Costs",
+        "Uninsured Motorist Property",
+        "Uninsured Motorist Bodily Injury",
+        "Auto Discounts",
+        "Auto policy premium",
+    ):
+        value = clean_value(fields.get(label, ""))
+        if not value or value == OMIT_LINE:
+            continue
+        display_label = "Discounts" if label == "Auto Discounts" else label
+        lines.append(f"{display_label}: {value}")
+
+    return [line.rstrip() for line in lines if line.rstrip()]
+
+
 def render_template(template_text: str, fields: dict[str, str]) -> str:
+    lines: list[str] = []
     counters: dict[str, int] = {}
+    current_section: str | None = None
+
+    def resolve_value(raw_label: str, section: str | None) -> tuple[str, str]:
+        counters[raw_label] = counters.get(raw_label, 0) + 1
+        occurrence = counters[raw_label]
+
+        if raw_label in SHARED_SINGLETON_LABELS:
+            if occurrence > 1:
+                return raw_label, OMIT_LINE
+            return raw_label, fields.get(raw_label, "")
+
+        alias_candidates = SECTION_FIELD_ALIASES.get(section or "", {}).get(raw_label, ())
+        for key in alias_candidates:
+            if key in fields:
+                return raw_label, fields.get(key, "")
+
+        key = raw_label if occurrence == 1 else f"{raw_label}__{occurrence}"
+        if key in fields:
+            return raw_label, fields[key]
+        if occurrence == 1:
+            return raw_label, fields.get(raw_label, "")
+        return raw_label, ""
 
     def replace_token(match: re.Match[str]) -> str:
         raw_label = clean_label(match.group(1))
-        counters[raw_label] = counters.get(raw_label, 0) + 1
-        key = raw_label if counters[raw_label] == 1 else f"{raw_label}__{counters[raw_label]}"
-        value = fields[key] if key in fields else (fields.get(raw_label, "") if counters[raw_label] == 1 else "")
-        display_label = "Discounts" if raw_label == "Auto Discounts" else raw_label
+        display_label, value = resolve_value(raw_label, current_section)
+        if display_label == "Auto Discounts":
+            display_label = "Discounts"
 
         if display_label == "First name":
             return f"{value} " if value and fields.get("Last Name") else value
@@ -951,18 +1148,21 @@ def render_template(template_text: str, fields: dict[str, str]) -> str:
             return f"{display_label} {value}".rstrip()
         return f"{display_label}: {value}".rstrip()
 
-    rendered = re.sub(r"\{([^{}]+)\}", replace_token, strip_template_guidance(template_text), flags=re.DOTALL)
+    for template_line in strip_template_guidance(template_text).splitlines():
+        line = template_line.rstrip()
+        marker_section = SECTION_MARKERS.get(line.strip())
+        if marker_section:
+            current_section = None if current_section == marker_section else marker_section
 
-    lines: list[str] = []
-    plain_counters: dict[str, int] = {}
-    for line in rendered.splitlines():
+        rendered_line = re.sub(r"\{([^{}]+)\}", replace_token, line, flags=re.DOTALL)
+        line = rendered_line.rstrip()
         if OMIT_LINE in line:
             continue
         label = clean_label(line)
         if label in PLAIN_LABELS:
-            plain_counters[label] = plain_counters.get(label, 0) + 1
-            key = label if plain_counters[label] == 1 else f"{label}__{plain_counters[label]}"
-            value = fields[key] if key in fields else (fields.get(label, "") if plain_counters[label] == 1 else "")
+            display_label, value = resolve_value(label, current_section)
+            if display_label == "Auto Discounts":
+                display_label = "Discounts"
             lines.append(f"{label}: {value}".rstrip())
             continue
         lines.append(line.rstrip())
@@ -992,6 +1192,8 @@ def postprocess_rendered_lines(lines: list[str], fields: dict[str, str]) -> list
             "Loan Number:",
         },
     )
+
+    output = [line for line in output if line != "///////////Home/////////"]
 
     return collapse_blank_lines(output)
 
@@ -1063,7 +1265,7 @@ def choose_policy_pdfs(customer: str) -> tuple[list[Path], list[Path]]:
             home_paths.append(candidate)
         elif policy_type == "auto":
             auto_paths.append(candidate)
-        elif policy_type == "condo":
+        elif policy_type in ("condo", "renters"):
             condo_paths.append(candidate)
     return home_paths, auto_paths, condo_paths
 
@@ -1075,7 +1277,8 @@ def build_output_path(customer: str) -> Path:
 
 def extract_condo_fields(text: str, customer: str) -> dict[str, str]:
     names = extract_home_names(text, customer)
-    primary, _ = choose_primary_names(names, customer)
+    primary, secondary = choose_primary_names(names, customer)
+    doc_type = "renters" if re.search(r"\bRenters\b", text, re.IGNORECASE) else "condo"
     property_insured = search_first(
         text,
         r"Property Insured:?\s*(.*?)Your\s*Farmers\s*Agent",
@@ -1085,77 +1288,231 @@ def extract_condo_fields(text: str, customer: str) -> dict[str, str]:
     year_built = search(text, r"Description of Property Year of Construction.*?Occupancy\s*([0-9]{4})")
     if not year_built:
         year_built = search(text, r"Year of Construction\s*([0-9]{4})")
-    construction_type = search(text, r"Description of Property Year of Construction Construction Type Number of Stories Occupancy [0-9]{4}\s*(.*?)\s*[0-9]+ Story")
-    occupancy = search(text, r"Number of Stories Occupancy [0-9]{4}\s*.*?\s*[0-9]+ Story\s*(.*?)Property Coverage")
-    building_property = search(text, r"Coverage A - Unit Owner's Building Property\s*(\$[0-9,]+)")
-    personal_property = search(text, r"Coverage C - Personal Property\s*Personal Property Replacement Cost\s*(\$[0-9,]+)")
-    loss_of_use_amount = search(text, r"Coverage D - Loss of Use\s*Additional Living Expense Term\s*(\$[0-9,]+)")
-    loss_of_use_months = search(text, r"Coverage D - Loss of Use\s*Additional Living Expense Term\s*\$[0-9,]+\s*([0-9]+ Months)")
-    loss_of_use_percent = ""
-    if personal_property and loss_of_use_amount:
-        base = int(re.sub(r"[^0-9]", "", personal_property) or "0")
-        loss = int(re.sub(r"[^0-9]", "", loss_of_use_amount) or "0")
-        if base:
-            loss_of_use_percent = f"{round(loss / base * 100)}%"
+    condo_coverage = search(
+        text,
+        r"Property Coverage Coverage\s*Limit Coverage\s*Limit\s*"
+        r"Coverage C - Personal Property\s*Contents Replacement Cost\s*"
+        r"Unit Owner'?s Building Property\s*(\$[0-9,]+)\s*(?:Covered|Not Covered)\s*(\$[0-9,]+)\s*"
+        r"Coverage D - Loss of Use\s*(\$[0-9,]+)",
+    )
+    personal_property = ""
+    building_property = ""
+    loss_of_use_amount = ""
+    coverage_match = re.search(
+        r"Property Coverage Coverage\s*Limit Coverage\s*Limit\s*"
+        r"Coverage C - Personal Property\s*Contents Replacement Cost\s*"
+        r"Unit Owner'?s Building Property\s*(\$[0-9,]+)\s*(?:Covered|Not Covered)\s*(\$[0-9,]+)\s*"
+        r"Coverage D - Loss of Use\s*(\$[0-9,]+)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if coverage_match:
+        personal_property = clean_value(coverage_match.group(1))
+        building_property = clean_value(coverage_match.group(2))
+        loss_of_use_amount = clean_value(coverage_match.group(3))
+    if not personal_property:
+        personal_property = search(text, r"Coverage C - Personal Property.*?(\$[0-9,]+)")
+    if not building_property:
+        building_property = search_first(
+            text,
+            r"Unit Owner'?s Building Property\s*(\$[0-9,]+)",
+            r"Coverage A - Unit Owner'?s Building Property\s*(\$[0-9,]+)",
+        )
+    if not loss_of_use_amount:
+        loss_of_use_amount = search(text, r"Coverage D - Loss of Use.*?(\$[0-9,]+)")
+    loss_of_use_percent = search_first(
+        text,
+        r"Coverage D - Loss of Use\s*(\d+%)",
+        r"Loss of Use\s*(\d+%)",
+        r"Additional Living Expense\s*(\d+%)",
+    )
+    expiration = search(text, r"Expiration:\s*([0-9/]+)")
 
     return {
+        "doc_type": doc_type,
         "primary_name": " ".join(part for part in primary if part).strip(),
+        "secondary_name": " ".join(part for part in secondary if part).strip(),
+        "email": search_first(
+            text,
+            r"Named Insured\(s\):.*?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\s+Property Insured",
+            r"e-mail\s*Address\(es\):\s*(.*?)Property Insured",
+        ),
         "property_insured": property_insured,
+        "policy_number": format_policy_number(
+            search_first(
+                text,
+                r"Policy Number:\s*([A-Z0-9-]+)\s+Effective:",
+                r"Policy No\.\s*([A-Z0-9-]+)",
+            )
+        ),
         "effective": search(text, r"Effective:\s*([0-9/]+)"),
+        "expiration": expiration,
         "year_built": year_built,
-        "construction_type": construction_type.replace("Frame or Any Other", "Frame"),
-        "occupancy": occupancy,
-        "deductible": search(text, r"All other covered property losses\s*(\$[0-9,]+)"),
+        "deductible": search_first(
+            text,
+            r"All other covered property losses\s*(\$[0-9,]+)",
+            r"All Perils Deductible\s*(\$[0-9,]+)",
+            r"Deductible\s*(\$[0-9,]+)",
+            r"Applicable to each covered loss\s*(\$[0-9,]+)",
+        ),
         "personal_property": personal_property,
-        "loss_settlement": search(text, r"Property Losses Loss Settlement Terms.*?Personal Property \(Pays up to the limit for Coverage C\)\s*(.*?)Discounts Applied"),
+        "loss_of_use": loss_of_use_amount,
         "loss_of_use_percent": loss_of_use_percent,
-        "loss_of_use_months": loss_of_use_months,
-        "personal_liability": search(text, r"Coverage E - Personal Liability\s*Personal Injury\s*(\$[0-9,]+)"),
+        "personal_liability": search(text, r"Coverage E - Personal Liability.*?(\$[0-9,]+)"),
+        "medical_payments": search(text, r"Coverage F - Medical Payments to Others\s*(\$[0-9,]+)"),
         "building_property": building_property,
         "loss_assessment": search(text, r"Association Loss Assessment\s*(\$[0-9,]+)"),
+        "mortgagee": search(
+            text,
+            r"1st Mortgagee\s*Loan Number\s*(.*?)\s*(?:\d{6,}|[A-Z0-9]{10,})\s*Policy and Endorsements",
+        ),
+        "loan_number": search(
+            text,
+            r"1st Mortgagee\s*Loan Number\s*.*?\s+(\d{6,}|[A-Z0-9]{10,})\s*Policy and Endorsements",
+        ),
+        "policy_premium": search_first(
+            text,
+            r"Renewal\s+Premium\s*(\$[0-9,]+(?:\.\d{2})?)",
+            r"Policy Premium\s*(\$[0-9,]+(?:\.\d{2})?)",
+        ),
     }
 
 
-def render_condo_notes(customer: str, condo_paths: list[Path]) -> str:
+def parse_existing_condo_overrides(note_text: str) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    lines = note_text.splitlines()
+    if lines:
+        overrides["primary_name"] = lines[0].strip()
+    if len(lines) >= 2 and lines[1].startswith("Date of birth:"):
+        overrides["date_of_birth"] = lines[1].split(":", 1)[1].strip()
+    if (
+        len(lines) >= 5
+        and lines[3].strip()
+        and ":" not in lines[3]
+        and lines[4].startswith("Date of birth:")
+    ):
+        overrides["secondary_name"] = lines[3].strip()
+        overrides["date_of_birth__2"] = lines[4].split(":", 1)[1].strip()
+
+    for label, key in (
+        ("Phone number:", "phone_number"),
+        ("e-mail Address(es):", "email"),
+        ("Property Insured:", "property_insured"),
+        ("Policy Number:", "policy_number"),
+        ("Effective:", "effective"),
+        ("Expiration:", "expiration"),
+        ("Year Built:", "year_built"),
+        ("Deductible:", "deductible_rendered"),
+        ("Loss of Use:", "loss_of_use"),
+        ("Loss of Use %:", "loss_of_use_percent"),
+        ("Medical Payments to Others:", "medical_payments"),
+        ("Guest Medical:", "medical_payments"),
+        ("Personal Liability:", "personal_liability"),
+        ("Personal Property:", "personal_property"),
+        ("Personal Property Limit:", "personal_property"),
+        ("Building Property:", "building_property"),
+        ("Loss Assessment:", "loss_assessment"),
+        ("Personal Property ", "personal_property"),
+        ("Building Property ", "building_property"),
+        ("Loss Assessment ", "loss_assessment"),
+        ("1st Mortgagee:", "mortgagee"),
+        ("Loan Number:", "loan_number"),
+        ("Policy Premium:", "policy_premium"),
+    ):
+        for line in lines:
+            if line.startswith(label):
+                overrides[key] = line[len(label) :].strip()
+                break
+    return overrides
+
+
+def render_condo_notes(customer: str, condo_paths: list[Path], existing_text: str = "") -> str:
     text_by_path = {path: read_pdf_text(path) for path in condo_paths}
     docs = [extract_condo_fields(text_by_path[path], customer) for path in condo_paths]
+    overrides = parse_existing_condo_overrides(existing_text) if existing_text else {}
     primary_name = next((doc["primary_name"] for doc in docs if doc.get("primary_name")), customer)
-    lines = [primary_name]
+    secondary_name = next((doc["secondary_name"] for doc in docs if doc.get("secondary_name")), "")
+    primary_doc = docs[0] if docs else {}
+    primary_name = overrides.get("primary_name", primary_name)
+    secondary_name = overrides.get("secondary_name", secondary_name)
+    is_renters = primary_doc.get("doc_type") == "renters"
 
-    for index, doc in enumerate(docs, start=1):
-        property_insured = doc.get("property_insured", "")
-        if lines[-1] != "":
-            lines.append("")
-        lines.append(f"Property {index}: {property_insured}")
-        lines.append(f"Renewal date: {doc.get('effective', '')}")
-        lines.append("")
-        lines.append(property_insured.split(",")[0] if property_insured else "")
-        if doc.get("year_built"):
-            lines.append(f"Built {doc['year_built']}")
-        if doc.get("occupancy"):
-            lines.append("Occupancy")
-            lines.append(doc["occupancy"])
-        if doc.get("construction_type"):
-            lines.append(doc["construction_type"])
-        if doc.get("deductible"):
-            lines.append(f"{doc['deductible']} all perils deductible")
-        if doc.get("personal_property"):
-            lines.append(f"{doc['personal_property']} Personal property")
-        if doc.get("loss_settlement"):
-            lines.append("RCV" if "Replacement Cost" in doc["loss_settlement"] else doc["loss_settlement"])
-        if doc.get("loss_of_use_percent"):
-            lines.append(f"{doc['loss_of_use_percent']} Loss of use")
-        if doc.get("loss_of_use_months"):
-            lines.append(doc["loss_of_use_months"])
-        if doc.get("personal_liability"):
-            lines.append(f"Personal Liability {doc['personal_liability']}")
-        if doc.get("building_property"):
-            lines.append(f"Building Property Unit Owners {doc['building_property']}")
-        if doc.get("loss_assessment"):
-            lines.append(f"{doc['loss_assessment']} Loss Assessment coverage")
-        lines.append("")
+    lines = [
+        primary_name,
+        f"Date of birth: {overrides.get('date_of_birth', '')}".rstrip(),
+        "",
+    ]
+    if secondary_name:
+        lines.extend(
+            [
+                secondary_name,
+                f"Date of birth: {overrides.get('date_of_birth__2', '')}".rstrip(),
+                "",
+            ]
+        )
 
-    return "\n".join(line for line in lines if line is not None).rstrip() + "\n"
+    lines.extend(
+        [
+            f"Phone number: {overrides.get('phone_number', '')}".rstrip(),
+            f"e-mail Address(es): {overrides.get('email', primary_doc.get('email', ''))}".rstrip(),
+            f"Property Insured: {overrides.get('property_insured', primary_doc.get('property_insured', ''))}".rstrip(),
+            f"Policy Number: {overrides.get('policy_number', primary_doc.get('policy_number', ''))}".rstrip(),
+            f"Effective: {overrides.get('effective', primary_doc.get('effective', ''))}".rstrip(),
+            f"Expiration: {overrides.get('expiration', primary_doc.get('expiration', ''))}".rstrip(),
+            (f"Year Built: {overrides.get('year_built', primary_doc.get('year_built', ''))}".rstrip() if not is_renters else ""),
+            "",
+        ]
+    )
+
+    deductible = clean_value(primary_doc.get("deductible", ""))
+    deductible_line = overrides.get("deductible_rendered", "")
+    if deductible_line:
+        lines.append(f"Deductible: {deductible_line}".rstrip())
+    else:
+        lines.append(f"Deductible: {deductible} All perils".rstrip() if deductible else "Deductible:")
+    lines.append("")
+    lines.append("")
+
+    if is_renters:
+        lines.append(
+            f"Personal Property Limit: {clean_value(overrides.get('personal_property', primary_doc.get('personal_property', '')))}".rstrip()
+        )
+        lines.append(
+            f"Loss of Use %: {clean_value(overrides.get('loss_of_use_percent', primary_doc.get('loss_of_use_percent', '')))}".rstrip()
+        )
+        lines.append(
+            f"Personal Liability: {clean_value(overrides.get('personal_liability', primary_doc.get('personal_liability', '')))}".rstrip()
+        )
+        lines.append(
+            f"Guest Medical: {clean_value(overrides.get('medical_payments', primary_doc.get('medical_payments', '')))}".rstrip()
+        )
+    else:
+        coverage_lines = [
+            ("Loss of Use:", overrides.get("loss_of_use", primary_doc.get("loss_of_use", ""))),
+            ("Medical Payments to Others:", overrides.get("medical_payments", primary_doc.get("medical_payments", ""))),
+            ("Personal Liability:", overrides.get("personal_liability", primary_doc.get("personal_liability", ""))),
+        ]
+        for label, value in coverage_lines:
+            lines.append(f"{label} {clean_value(value)}".rstrip())
+        personal_property = overrides.get("personal_property", primary_doc.get("personal_property", ""))
+        building_property = overrides.get("building_property", primary_doc.get("building_property", ""))
+        loss_assessment = overrides.get("loss_assessment", primary_doc.get("loss_assessment", ""))
+        lines.append(f"Personal Property: {clean_value(personal_property)}".rstrip())
+        lines.append(f"Building Property: {clean_value(building_property)}".rstrip())
+        lines.append(f"Loss Assessment: {clean_value(loss_assessment)}".rstrip())
+
+    lines.extend(
+        [
+            "",
+            (f"1st Mortgagee: {overrides.get('mortgagee', primary_doc.get('mortgagee', ''))}".rstrip() if not is_renters else ""),
+            (f"Loan Number: {overrides.get('loan_number', primary_doc.get('loan_number', ''))}".rstrip() if not is_renters else ""),
+            "",
+            "",
+            f"Policy Premium: {overrides.get('policy_premium', primary_doc.get('policy_premium', ''))}".rstrip(),
+        ]
+    )
+
+    return "\n".join(collapse_blank_lines([line.rstrip() for line in lines])).rstrip() + "\n"
 
 
 def write_output(output_path: Path, rendered: str) -> None:
@@ -1198,8 +1555,6 @@ def write_output(output_path: Path, rendered: str) -> None:
 
 def build_fields(customer: str) -> dict[str, str]:
     home_paths, auto_paths, condo_paths = choose_policy_pdfs(customer)
-    if condo_paths:
-        raise ValueError("Condo notes use render_condo_notes instead of build_fields.")
     if not home_paths and not auto_paths:
         raise FileNotFoundError(f"No matching home or auto PDFs found for {customer!r}.")
 
@@ -1265,10 +1620,19 @@ def main() -> int:
     template_text = template_path.read_text(encoding="utf-8")
     home_paths, auto_paths, condo_paths = choose_policy_pdfs(args.customer)
     if condo_paths:
-        rendered = render_condo_notes(args.customer, condo_paths)
+        existing_text = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+        rendered = render_condo_notes(args.customer, condo_paths, existing_text=existing_text)
+        if auto_paths:
+            fields = build_fields(args.customer)
+            auto_section = "\n".join(render_auto_section_lines(fields, include_marker=True)).rstrip()
+            if auto_section:
+                rendered = rendered.rstrip() + "\n\n" + auto_section + "\n"
     else:
         fields = build_fields(args.customer)
-        rendered = render_template(template_text, fields)
+        if fields.get("__has_auto__") and not fields.get("__has_home__") and "///////////Auto/////////" not in template_text:
+            rendered = render_auto_only_notes(fields)
+        else:
+            rendered = render_template(template_text, fields)
     write_output(output_path, rendered)
 
     print(output_path)

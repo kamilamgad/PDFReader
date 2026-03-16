@@ -1,7 +1,7 @@
 interface:
   display_name: "PDF Notes"
-  short_description: "Create customer notes from Home/Auto PDFs"
-  default_prompt: "Use $pdf-notes to make notes for a customer by reading the matching PDF in Downloads and filling NotesTemplate.txt into a new notes text file."
+  short_description: "Create compact customer notes from Home/Auto PDFs"
+  default_prompt: "Use $pdf-notes to make notes for a customer by reading the matching PDFs in Downloads and writing the appropriate compact notes summary directly to a new notes text file in Downloads for Home, Auto, Condo, and mixed policy cases."
 
 policy:
   allow_implicit_invocation: true

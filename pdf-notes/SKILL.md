@@ -9,7 +9,7 @@ description: Use when the user asks to "make notes for" a customer, create notes
 
 This skill creates customer notes from PDFs stored in `%USERPROFILE%\Downloads`.
 Use it when the user wants notes for a customer and the source PDFs follow the naming pattern `{FirstName}{LastName}Home.pdf`, `{FirstName}{LastName}Home2.pdf`, `{FirstName}{LastName}Auto.pdf`, `{FirstName}{LastName}Auto2.pdf`, `{FirstName}{LastName}Condo.pdf`, or `{FirstName}{LastName}Condo2.pdf`.
-The current implementation fills `%USERPROFILE%\Downloads\NotesTemplate.txt` for Home/Auto notes and uses a condo-style summary renderer for Condo notes.
+The default output is written directly into `Downloads`. Home/Auto cases use the compact plain-text summary style without the three-line agent footer. Condo and Auto+Condo cases route through the condo summary renderer automatically.
 
 ## Workflow
 
@@ -18,24 +18,24 @@ The current implementation fills `%USERPROFILE%\Downloads\NotesTemplate.txt` for
    - Expected files are named with no separator between first and last name, plus `Home`, `Auto`, or `Condo`, with an optional trailing number for multiple policies.
    - Examples: `LauraFolloHome.pdf`, `LauraFolloAuto.pdf`, `GetachewMollaAuto2.pdf`, `SwatiSinghCondo2.pdf`
    - Prefer exact normalized matches first, then looser matches if needed.
-3. Use `NotesTemplate.txt` in `Downloads` as the output shape for Home/Auto notes.
-   - Any field wrapped in `{}` should be treated as a label-driven extraction target.
-   - Shared customer fields should be filled once even when both Home and Auto PDFs exist.
-   - Auto-only and Home-only customers should still generate a single notes file.
+3. For Home/Auto notes, generate the compact summary format:
+   - Customer names first, then blank personal fields, then email and mailing address.
+   - A `Home Policy` section with dwelling facts, deductibles, coverages, discounts, mortgagee, and premium lines.
+   - An `Auto Policy` section with named insureds, household drivers, per-vehicle deductibles, core liability coverages, and discounts.
+   - Do not append agent or agency footer lines unless the user explicitly asks for them.
 4. For Condo notes, follow the compact multi-property format shown by `SSinghNotes.txt`.
-5. Use [scripts/generate_notes.py](scripts/generate_notes.py) for the current combined workflow.
-   - By default it writes generated notes into `pdf-notes/generated/`.
-   - If the user specifically wants the finished `.txt` copied into `Downloads`, do that as a separate shell step after generation.
+5. Use [scripts/generate_fast_notes.py](scripts/generate_fast_notes.py) as the default entry point.
+   - By default it writes generated notes into `Downloads`.
+   - It routes Home, Auto, Home+Auto, Condo, and Auto+Condo automatically.
+   - Use [scripts/generate_notes.py](scripts/generate_notes.py) only when the user explicitly wants the older `NotesTemplate.txt` flow.
 6. If a field is not present in the PDF, keep the line and leave the value blank instead of guessing unless the condo renderer intentionally omits that line.
 
 ## Output Rules
 
 - Write a new `.txt` file.
-- Default script output goes to `pdf-notes/generated/`.
-- If requested, copy the final `.txt` to `Downloads` after generation.
-- Follow `NotesTemplate.txt` line order.
-- Replace `{label}` placeholders with `label: extracted value`.
-- Preserve the example note style only where it does not conflict with the template.
+- Default Home/Auto output goes to `%USERPROFILE%\Downloads`.
+- For Home/Auto notes, follow the compact summary layout instead of `NotesTemplate.txt`.
+- Use `NotesTemplate.txt` only when the user explicitly asks for the older template output.
 - When both Home and Auto documents exist, populate the Home and Auto sections separately without repeating shared customer info.
 - When Condo documents exist, render the condo summary format instead of the Home/Auto template.
 
@@ -44,7 +44,8 @@ The current implementation fills `%USERPROFILE%\Downloads\NotesTemplate.txt` for
 ### Script
 
 Use [scripts/find_matching_pdfs.py](scripts/find_matching_pdfs.py) to locate candidate files in `Downloads` for a customer name before reading PDFs manually.
-Use [scripts/generate_notes.py](scripts/generate_notes.py) to generate Home, Auto, or Condo notes.
+Use [scripts/generate_fast_notes.py](scripts/generate_fast_notes.py) to generate the default compact Home/Auto notes.
+Use [scripts/generate_notes.py](scripts/generate_notes.py) for the older template-based flow when explicitly requested.
 
 ### Reference
 

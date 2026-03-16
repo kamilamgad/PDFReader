@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 DOWNLOADS = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"
-SUFFIXES = ("auto", "home", "condo")
+SUFFIXES = ("auto", "home", "condo", "renters")
 
 
 def normalize(value: str) -> str:
@@ -24,7 +24,7 @@ def normalize(value: str) -> str:
 
 def split_candidate(stem: str) -> tuple[str, str, str] | None:
     normalized = normalize(stem)
-    match = re.fullmatch(r"(.+?)(auto|home|condo)(\d*)", normalized)
+    match = re.fullmatch(r"(.+?)(auto|home|condo|renters)(\d*)", normalized)
     if not match:
         return None
     return match.group(1), match.group(2), match.group(3)
