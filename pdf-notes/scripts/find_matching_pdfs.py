@@ -14,7 +14,12 @@ import re
 from pathlib import Path
 
 
-DOWNLOADS = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"
+DOWNLOADS = Path(
+    os.environ.get(
+        "PDF_NOTES_INPUT_DIR",
+        str(Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"),
+    )
+)
 SUFFIXES = ("auto", "home", "condo", "renters")
 
 

@@ -21,9 +21,24 @@ from pypdf import PdfReader
 from find_matching_pdfs import find_candidates, normalize, policy_type_for_path
 
 
-DOWNLOADS = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"
-DEFAULT_TEMPLATE = DOWNLOADS / "NotesTemplate.txt"
-DEFAULT_OUTPUT_DIR = DOWNLOADS
+DOWNLOADS = Path(
+    os.environ.get(
+        "PDF_NOTES_INPUT_DIR",
+        str(Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Downloads"),
+    )
+)
+DEFAULT_TEMPLATE = Path(
+    os.environ.get(
+        "PDF_NOTES_TEMPLATE",
+        str(DOWNLOADS / "NotesTemplate.txt"),
+    )
+)
+DEFAULT_OUTPUT_DIR = Path(
+    os.environ.get(
+        "PDF_NOTES_OUTPUT_DIR",
+        str(DOWNLOADS),
+    )
+)
 DEFAULT_OUTPUT_SUFFIX = "Notes.txt"
 OMIT_LINE = "__OMIT_LINE__"
 PLAIN_LABELS = (

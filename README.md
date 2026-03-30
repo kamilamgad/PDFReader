@@ -92,6 +92,24 @@ python pdf-notes/scripts/generate_notes.py "Jordan Parker"
 
 By default, output note files are written to the user's `Downloads` folder.
 
+## Easy Demo For Reviewers
+
+This repo also includes a safe demo path so someone can evaluate the notes-generation workflow without using real customer PDFs.
+
+Run:
+
+```bash
+python demo/run_demo.py
+```
+
+That generates:
+
+```text
+demo/output/JordanParkerNotes.txt
+```
+
+The demo uses fake customer fixtures and is intended to make the project easier to review for hiring or portfolio purposes.
+
 ## Example Workflow
 
 1. Save one or more policy PDFs to `Downloads`

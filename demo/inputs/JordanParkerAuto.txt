@@ -1,0 +1,15 @@
+Policy Number: 77777-88-9 Effective: 04/15/2026 12:01 AM Expiration: 10/15/2026 12:01 AM Named Insured(s): Jordan Parker 123 Main Street Glenn Dale MD 20769 e-mail Address(es): jordan.parker@example.com
+Household Drivers All persons Name Driver Status Name Driver Status Jordan Parker Covered Taylor Parker Covered Vehicle Information
+Vehicle Information Veh. # Year/Make/Model/VIN Limit Coverage Deductible
+1 2021 Toyota Camry LE Comprehensive: $500 4T1G11AK1MU123456 Collision: $500 Uninsured Motorist Property Damage: $200 Rental Reimbursement: $40 per day / $1,200 max
+Vehicle Level Coverage Items
+Bodily Injury Liability $100,000 each person $300,000 each accident
+Property Damage Liability $100,000 each accident
+Personal Injury Protection $2,500 each person
+Uninsured Motorist $100,000 each person $300,000 each accident
+Uninsured Motorist Property Damage $100,000 each accident
+Towing and Labor Costs Covered
+Glass Deductible Buyback Covered
+Vehicle 1 - Deductible reduced to $100 for glass loss
+Auto Discounts Homeownership Multiple Car Safe Driver EFT ePolicy Auto/Home
+Renewal Premium $1,126.00
