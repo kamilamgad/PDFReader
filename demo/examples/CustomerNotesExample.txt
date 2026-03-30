@@ -1,21 +1,21 @@
 Jordan Parker
 Date of birth: 08/14/1985
-Social security number: 417228364
-Drivers license #: P84726195
+Social security number: 111111111
+Drivers license #: SAMPLE111
 Virginia
 
 Taylor Morgan Parker
 Date of birth: 02/19/1988
-Social security number: 538114207
-Drivers license #: R52844013 (VA)
+Social security number: 222222222
+Drivers license #: SAMPLE222 (VA)
 
-Phone number: (804) 555-0182, (804) 555-0114
-e-mail Address(es): jordan.parker@example.com
-Mailing Address: 1842 Willow Crest Dr Richmond, VA 23233-4412
+Phone number: (555) 111-1111, (555) 222-2222
+e-mail Address(es): sample@example.com
+Mailing Address: 111 Sample Ave Richmond, VA 11111-1111
 
 Home Policy
-Property Insured: 1842 Willow Crest Dr Richmond, VA 23233-4412
-Policy Number: 84152-63-47
+Property Insured: 111 Sample Ave Richmond, VA 11111-1111
+Policy Number: 11111-11-11
 Effective: 5/30/2025
 Expiration: 5/30/2026
 Year Built: 1978
@@ -54,48 +54,48 @@ Personal Injury: Covered
 
 Discounts: Auto/Home, Non Smoker, ePolicy
 
-Mortgagee: Example National Bank ISAOA PO Box 100515 Florence, SC 29502-0515
-Loan Number: 8841027735
+Mortgagee: Example National Bank ISAOA PO Box 111111 Sample City, SC 11111-1111
+Loan Number: 1111111111
 
 Renewal Premium: $2,900.78
 Prior Term Premium:
 
 Auto Policy
-Policy Number: 31864-25-91
+Policy Number: 22222-22-22
 Effective: 4/10/2026
 Expiration: 10/10/2026
 Policy Premium: $5123.90
 Named Insured(s): Jordan Parker
 
-Household Drivers: Taylor M Parker 02/19/1988, 538114207
-Jordan Parker 08/14/1985, P84726195
-Avery Parker (daughter), 11/03/2004, V40192837 (VA)
-Riley Parker (daughter), 07/22/2007, W51106482
+Household Drivers: Taylor M Parker 02/19/1988, 222222222
+Jordan Parker 08/14/1985, SAMPLE111
+Avery Parker (daughter), 11/03/2004, SAMPLE333 (VA)
+Riley Parker (daughter), 07/22/2007, SAMPLE444
 
 
 
 Vehicle 1: 2015 Chevrolet Truck Slvrdo 1500 E C 4X4 Lt
-VIN: 1HGBH41JXMN109186
+VIN: SAMPLEVIN11111111
 Comprehensive Deductible: $500
 Collision Deductible: $500
 glass buyback
 towing
 
 Vehicle 2: 2019 Nissan Rogue 4D 4Wd S/Sv/Sl
-VIN: 2FTRX18W1XCA01234
+VIN: SAMPLEVIN22222222
 Comprehensive Deductible: $500
 Collision Deductible: $500
 glass buyback
 
 Vehicle 3: 2021 Chevrolet Truck Trailblazer 4D 2Wd Lt
-VIN: 3GNAXUEV5KL221908
+VIN: SAMPLEVIN33333333
 Comprehensive Deductible: $500
 Collision Deductible: $500
 glass buyback
 
 
 Vehicle 4: 2005 Mazda Tribute 4d 2wd I
-VIN: JM1BK32F981812345
+VIN: SAMPLEVIN44444444
 Liability only
 towing
 
