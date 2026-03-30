@@ -2,6 +2,8 @@
 
 `PDFReader` is a Python workflow automation tool that converts Farmers-style insurance PDF packets into structured plain-text notes.
 
+![Sanitized example notes output](demo/examples/notes-example.png)
+
 It was built to reduce repetitive manual review work by:
 
 - finding the right customer PDFs automatically
@@ -10,6 +12,20 @@ It was built to reduce repetitive manual review work by:
 - preserving customer policy data in a structured text format for CRM intake and recordkeeping
 
 This is not a generic PDF viewer. It is a specialized document-processing utility for operations-heavy insurance work.
+
+## Quick Try
+
+If you want the fastest way to see the project work without real customer files:
+
+```bash
+python demo/run_demo.py
+```
+
+That generates a sanitized example notes file using fake policy fixtures and writes it to:
+
+```text
+demo/output/JordanParkerNotes.txt
+```
 
 ## What It Does
 
