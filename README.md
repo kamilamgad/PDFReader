@@ -45,6 +45,16 @@ Reviewing policy packets by hand is repetitive and slow. This project turns that
 - cut down on missed details in long PDFs
 - keep important customer data available in a reusable note file instead of trapped inside PDFs
 
+## Privacy and Safe Handling
+
+This project is intended for consent-based internal document workflows where the customer has already provided the policy documents for servicing, review, or intake.
+
+- keep real PDFs, generated notes, and copied CRM text out of version control
+- use sanitized fixtures for demos, screenshots, and public examples
+- retain customer information only in the business system that actually needs it
+- delete temporary note files or local exports when they are no longer needed
+- review generated notes before reuse so only necessary information is retained downstream
+
 ## Repo Layout
 
 `pdf-notes/scripts/find_matching_pdfs.py`
@@ -138,6 +148,7 @@ Example assets included in the repo:
 3. Review the generated `.txt` output
 4. Use the note file as a structured summary instead of re-reading the full packet
 5. Save or paste the generated text into a customer profile in a CRM workflow
+6. Delete temporary local note files if they are no longer needed after the downstream record is updated
 
 ## Output
 
@@ -174,9 +185,9 @@ Depending on the source PDFs, output may include:
 
 ## Privacy
 
-This project is designed to work with insurance documents. Do not commit customer PDFs, generated notes, credentials, or other sensitive data.
+This project is designed to work with insurance documents. Use it only in workflows where the customer has already provided the documents for a legitimate business purpose. Do not commit customer PDFs, generated notes, credentials, or other sensitive data.
 
-The repo currently ignores generated note output and local cache files.
+The repo currently ignores generated note output and local cache files, and the public demo assets are sanitized example data only.
 
 ## Status
 

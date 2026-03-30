@@ -12,6 +12,8 @@ This folder provides a safe demo flow for `PDFReader` without any real customer 
 
 The input files are fake text fixtures that mimic extracted policy content closely enough to demonstrate the notes-generation workflow.
 
+All example inputs and outputs in this folder are sanitized for public review and do not contain live customer data.
+
 ## Run The Demo
 
 From the repo root:
