@@ -1,6 +1,6 @@
 # PDFReader
 
-`PDFReader` is a Python workflow automation tool that converts Farmers-style insurance PDF packets into structured plain-text notes.
+`PDFReader` is a Python workflow automation tool that converts insurance policy PDF packets into structured plain-text notes.
 
 ![Sanitized example notes output](demo/examples/notes-example.png)
 
@@ -178,7 +178,7 @@ Depending on the source PDFs, output may include:
 
 ## Limitations
 
-- Built around Farmers-style document structure and naming conventions
+- Built around a specific insurance document structure and naming convention
 - Relies heavily on text extraction and regex parsing
 - Not intended for arbitrary PDFs
 - May need updates when carrier layouts change
